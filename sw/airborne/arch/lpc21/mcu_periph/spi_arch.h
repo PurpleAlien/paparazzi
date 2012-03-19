@@ -32,8 +32,33 @@
 #include "LPC21xx.h"
 #include BOARD_CONFIG
 
-extern volatile uint8_t spi_tx_idx;
-extern volatile uint8_t spi_rx_idx;
+enum SPIDataSizeSelect {
+  8bit,
+  16bit
+};
+
+enum SPIOptions {
+  SPIDataSizeSelect dss;
+};
+
+#ifdef USE_SPI0
+
+extern void spi0_hw_init(void);
+
+#endif /* USE_SPI0 */
+
+// SSP is on SPI1 on lpc
+#if defined USE_SSP & !defined USE_SPI1
+#define USE_SP11 1
+// TODO other defines ?
+#endif
+
+#ifdef USE_SPI1
+
+extern void spi1_hw_init(void);
+
+#endif /* USE_SPI1 */
+
 
 #define SpiInitBuf() {                                                  \
   spi_rx_idx = 0;                                                       \
@@ -110,6 +135,10 @@ extern volatile uint8_t spi_rx_idx;
   }
 
 #ifdef SPI_SLAVE
+
+extern volatile uint8_t spi_tx_idx;
+extern volatile uint8_t spi_rx_idx;
+
 #define SpiStart() {                              \
     SpiEnable();                              \
     SpiInitBuf();                             \

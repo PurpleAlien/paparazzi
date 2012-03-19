@@ -29,15 +29,62 @@
 #ifndef SPI_H
 #define SPI_H
 
-#ifdef USE_SPI
+//#ifdef USE_SPI
 
 #include "std.h"
 
+#include "mcu_periph/spi_arch.h"
+
+// FIXME how to use this properly ?
+enum SPIMode {
+  SPIMaster,
+  SPISlave
+};
+
+/** SPI slave selection behavior
+ * SelectUnselect: slave is selected before transaction and unselected after
+ * Select: slave is selected before transaction but not unselected
+ * Unselect: slave is not selected but unselected after transaction
+ * NoSelect: slave is not selected nor unselected
+ *
+ * Default operation should be SelectUnselected, but some peripherals
+ * might need some special control
+ * Use non-default control only if you know what you're doing
+ */
+enum SPISlaveSelect {
+  SPISelectUnselect,
+  SPISelect,
+  SPIUnselect,
+  SPINoSelect
+};
+
+/** SPI clock phase control
+ * control when data are sampled (rising or falling edge of clock)
+ * depending of the clock polarity
+ * clear: 0, set: 1
+ */
+enum SPIClockPhase {
+  SPICPHAClear,
+  SPICPHASet
+};
+
+/** SPI clock polarity control
+ * clear (0) for clock idle low
+ * set (1) for clock idle high
+ */
+enum SPIClockPolarity {
+  SPICPOLClear,
+  SPICPOLSet
+};
+
+/** SPI transaction status
+ */
 enum SPITransactionStatus {
   SPITransPending,
   SPITransRunning,
   SPITransSuccess,
-  SPITransFailed
+  SPITransFailed,
+  SPITransDone
 };
 
 enum SPIStatus {
@@ -45,17 +92,44 @@ enum SPIStatus {
   SPIRunning
 };
 
+#ifndef SPI_BUF_LEN
+#define SPI_BUF_LEN 32
+#endif
+
 struct spi_transaction {
-  volatile uint8_t* mosi_buf;
-  volatile uint8_t* miso_buf;
+  volatile uint8_t input_buf[SPI_BUF_LEN];
+  volatile uint8_t output_buf[SPI_BUF_LEN];
   volatile uint8_t* ready;
   uint8_t length;
   uint8_t slave_idx;
+  enum SPISlaveSelect select;
+  enum SPIClockPolarity cpol;
+  enum SPIClockPhase cpha;
+  enum SPIOptions options; // Architecture dependant options
   volatile enum SPITransactionStatus status;
 };
 
-#include "mcu_periph/spi_arch.h"
+#ifndef SPI_TRANSACTION_QUEUE_LEN
+#define SPI_TRANSACTION_QUEUE_LEN 8
+#endif
 
+struct spi_periph {
+  /* circular buffer holding transactions */
+  struct spi_transaction* trans[SPI_TRANSACTION_QUEUE_LEN];
+  uint8_t trans_insert_idx;
+  uint8_t trans_extract_idx;
+  /* internal state of the peripheral */
+  volatile enum SPIStatus status;
+  volatile uint8_t tx_idx_buf;
+  volatile uint8_t rx_idx_buf;
+  void* reg_addr;
+  enum SPIMode mode;
+};
+
+extern struct spi_periph spi2;
+extern bool_t spi_submit(struct spi_periph* p, struct spi_transaction* t);
+
+#ifdef SPI_SLAVE
 
 extern uint8_t* spi_buffer_input;
 extern uint8_t* spi_buffer_output;
@@ -63,7 +137,9 @@ extern uint8_t spi_buffer_length;
 
 extern volatile bool_t spi_message_received;
 
-void spi_init(void);
+void spi_slave_init(void);
+
+#endif
 
 #ifdef SPI_MASTER
 
@@ -72,14 +148,38 @@ void spi_init(void);
 #define SPI_SLAVE1 2
 #define SPI_SLAVE2 3
 
-extern volatile uint8_t spi_cur_slave;
-extern uint8_t spi_nb_ovrn;
+//extern volatile uint8_t spi_cur_slave;
+//extern uint8_t spi_nb_ovrn; //TODO SPI error struct
 
-#define SpiCheckAvailable() (spi_cur_slave == SPI_NONE)
-#define SpiOverRun() {spi_nb_ovrn++;}
+#ifdef USE_SPI0
+
+extern struct spi_periph spi0;
+extern void spi0_init(void);
+
+#endif
+
+#ifdef USE_SPI1
+
+extern struct spi_periph spi1;
+extern void spi1_init(void);
+
+#endif
+
+#ifdef USE_SPI2
+
+extern struct spi_periph spi2;
+extern void spi2_init(void);
+
+#endif
+
+extern void spi_init(struct spi_periph* p);
+extern bool_t spi_submit(struct spi_periph* p, struct spi_transaction* t);
+
+//#define SpiCheckAvailable() (spi_cur_slave == SPI_NONE)
+//#define SpiOverRun() {spi_nb_ovrn++;}
 
 #endif /* SPI_MASTER */
 
-#endif /* USE_SPI */
+//#endif /* USE_SPI */
 
 #endif /* SPI_H */
