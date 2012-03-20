@@ -27,7 +27,7 @@
 
 #include "subsystems/sensors/baro.h"
 #include "led.h"
-#include "mcu_periph/spi.h"
+//#include "mcu_periph/spi.h"
 
 /* Common Baro struct */
 struct Baro baro;
@@ -38,7 +38,7 @@ uint16_t startup_cnt;
 
 void baro_init( void ) {
   mcp355x_init();
-  SpiSelectSlave0(); // never unselect this slave (continious conversion mode)
+  //SpiSelectSlave0(); // never unselect this slave (continious conversion mode)
   baro.status = BS_UNINITIALIZED;
   baro.absolute     = 0;
   baro.differential = 0; /* not handled on this board */

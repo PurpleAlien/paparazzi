@@ -107,7 +107,7 @@ struct spi_transaction {
   enum SPISlaveSelect select;
   enum SPIClockPolarity cpol;
   enum SPIClockPhase cpha;
-  enum SPIOptions options; // Architecture dependant options
+  struct SPIOptions options; // Architecture dependant options
   volatile enum SPITransactionStatus status;
 };
 
@@ -127,9 +127,6 @@ struct spi_periph {
   void* reg_addr;
   enum SPIMode mode;
 };
-
-extern struct spi_periph spi2;
-extern bool_t spi_submit(struct spi_periph* p, struct spi_transaction* t);
 
 #ifdef SPI_MASTER
 

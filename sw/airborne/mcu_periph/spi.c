@@ -29,9 +29,9 @@
 
 #ifdef USE_SPI0
 
-extern struct spi_periph spi0;
+struct spi_periph spi0;
 
-extern void spi0_init(void) {
+void spi0_init(void) {
   spi_init(&spi0);
   spi0_hw_init();
 }
@@ -40,9 +40,9 @@ extern void spi0_init(void) {
 
 #ifdef USE_SPI1
 
-extern struct spi_periph spi1;
+struct spi_periph spi1;
 
-extern void spi1_init(void) {
+void spi1_init(void) {
   spi_init(&spi1);
   spi1_hw_init();
 }
@@ -51,16 +51,16 @@ extern void spi1_init(void) {
 
 #ifdef USE_SPI2
 
-extern struct spi_periph spi2;
+struct spi_periph spi2;
 
-extern void spi2_init(void) {
+void spi2_init(void) {
   spi_init(&spi2);
   spi2_hw_init();
 }
 
 #endif
 
-extern void spi_init(struct spi_periph* p) {
+void spi_init(struct spi_periph* p) {
   p->trans_insert_idx = 0;
   p->trans_extract_idx = 0;
   p->status = SPIIdle;

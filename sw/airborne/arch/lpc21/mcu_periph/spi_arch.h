@@ -33,12 +33,12 @@
 #include BOARD_CONFIG
 
 enum SPIDataSizeSelect {
-  8bit,
-  16bit
+  DSS8bit,
+  DSS16bit
 };
 
-enum SPIOptions {
-  SPIDataSizeSelect dss;
+struct SPIOptions {
+  enum SPIDataSizeSelect dss;
 };
 
 #ifdef USE_SPI0
