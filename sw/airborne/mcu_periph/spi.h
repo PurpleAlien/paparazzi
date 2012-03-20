@@ -87,6 +87,8 @@ enum SPITransactionStatus {
   SPITransDone
 };
 
+/** SPI peripheral status
+ */
 enum SPIStatus {
   SPIIdle,
   SPIRunning
@@ -99,7 +101,7 @@ enum SPIStatus {
 struct spi_transaction {
   volatile uint8_t input_buf[SPI_BUF_LEN];
   volatile uint8_t output_buf[SPI_BUF_LEN];
-  volatile uint8_t* ready;
+  volatile uint8_t* ready; // FIXME what is the difference with status ?
   uint8_t length;
   uint8_t slave_idx;
   enum SPISlaveSelect select;
@@ -129,26 +131,12 @@ struct spi_periph {
 extern struct spi_periph spi2;
 extern bool_t spi_submit(struct spi_periph* p, struct spi_transaction* t);
 
-#ifdef SPI_SLAVE
-
-extern uint8_t* spi_buffer_input;
-extern uint8_t* spi_buffer_output;
-extern uint8_t spi_buffer_length;
-
-extern volatile bool_t spi_message_received;
-
-void spi_slave_init(void);
-
-#endif
-
 #ifdef SPI_MASTER
 
-#define SPI_NONE   0
-#define SPI_SLAVE0 1
-#define SPI_SLAVE1 2
-#define SPI_SLAVE2 3
+#define SPI_SLAVE0 0
+#define SPI_SLAVE1 1
+#define SPI_SLAVE2 2
 
-//extern volatile uint8_t spi_cur_slave;
 //extern uint8_t spi_nb_ovrn; //TODO SPI error struct
 
 #ifdef USE_SPI0
@@ -172,14 +160,47 @@ extern void spi2_init(void);
 
 #endif
 
+/** Initialize a spi peripheral
+ * @param p spi peripheral to be configured
+ */
 extern void spi_init(struct spi_periph* p);
+
+/** Initialize all used slaves
+ */
+extern void spi_init_slaves(void);
+
+/** Submit a spi transaction
+ * @param p spi peripheral to be used
+ * @param t spi transaction
+ * @return return true if insertion to the transaction queue succed
+ */
 extern bool_t spi_submit(struct spi_periph* p, struct spi_transaction* t);
 
-//#define SpiCheckAvailable() (spi_cur_slave == SPI_NONE)
-//#define SpiOverRun() {spi_nb_ovrn++;}
+/** Select a slave
+ * @param slave slave id
+ */
+void spi_slave_select(uint8_t slave);
+
+/** Unselect a slave
+ * @param slave slave id
+ */
+void spi_slave_unselect(uint8_t slave);
 
 #endif /* SPI_MASTER */
+
+#ifdef SPI_SLAVE
+
+extern uint8_t* spi_buffer_input;
+extern uint8_t* spi_buffer_output;
+extern uint8_t spi_buffer_length;
+
+extern volatile bool_t spi_message_received;
+
+void spi_slave_init(void);
+
+#endif
 
 //#endif /* USE_SPI */
 
 #endif /* SPI_H */
+

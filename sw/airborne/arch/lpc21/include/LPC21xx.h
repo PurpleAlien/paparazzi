@@ -239,6 +239,28 @@
 //#define SSPMIS   (*(REG_8*) 0xE006801C) /* Masked interrupt status register */
 //#define SSPICR   (*(REG_8*) 0xE0068020) /* Interrupt clear register         */
 
+/* SSPCR0 bits definition */
+#define DSS   0
+#define FRF   4
+#define CPOL  6
+#define CPHA  7
+#define SCR   8
+
+/* SSPDSS values definition */
+#define DSS_VAL4  0x3
+#define DSS_VAL5  0x4
+#define DSS_VAL6  0x5
+#define DSS_VAL7  0x6
+#define DSS_VAL8  0x7
+#define DSS_VAL9  0x8
+#define DSS_VAL10 0x9
+#define DSS_VAL11 0xA
+#define DSS_VAL12 0xB
+#define DSS_VAL13 0XC
+#define DSS_VAL14 0xD
+#define DSS_VAL15 0xE
+#define DSS_VAL16 0xF
+
 /* SSPCR1 bits definition */
 #define LBM   0
 #define SSE   1

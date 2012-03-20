@@ -25,19 +25,7 @@
 #include "std.h"
 #include "mcu_periph/spi.h"
 
-#ifdef SPI_SLAVE
-
-uint8_t* spi_buffer_input;
-uint8_t* spi_buffer_output;
-uint8_t spi_buffer_length;
-volatile bool_t spi_message_received;
-
-#endif
-
 #ifdef SPI_MASTER
-
-//volatile uint8_t spi_cur_slave;
-//uint8_t spi_nb_ovrn;
 
 #ifdef USE_SPI0
 
@@ -79,3 +67,13 @@ extern void spi_init(struct spi_periph* p) {
 }
 
 #endif /* SPI_MASTER */
+
+#ifdef SPI_SLAVE
+
+uint8_t* spi_buffer_input;
+uint8_t* spi_buffer_output;
+uint8_t spi_buffer_length;
+volatile bool_t spi_message_received;
+
+#endif
+
