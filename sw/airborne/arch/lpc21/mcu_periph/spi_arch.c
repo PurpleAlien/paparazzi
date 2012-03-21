@@ -211,7 +211,7 @@ __attribute__ ((always_inline)) static inline void SpiStart(struct spi_periph* p
   else SpiClearCPOL(p);
   if (t->cpha == SPICPHASet) SpiSetCPHA(p);
   else SpiClearCPHA(p);
-  SpiSetDataSize(p, t->options.dss);
+  SpiSetDataSize(p, t->dss);
   // handle slave select
   if (t->select == SPISelectUnselect || t->select == SPISelect) {
     SpiSlaveSelect(t->slave_idx);

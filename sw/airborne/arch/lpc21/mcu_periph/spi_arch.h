@@ -32,15 +32,6 @@
 #include "LPC21xx.h"
 #include BOARD_CONFIG
 
-enum SPIDataSizeSelect {
-  DSS8bit,
-  DSS16bit
-};
-
-struct SPIOptions {
-  enum SPIDataSizeSelect dss;
-};
-
 #ifdef USE_SPI0
 
 extern void spi0_hw_init(void);

@@ -77,6 +77,13 @@ enum SPIClockPolarity {
   SPICPOLSet
 };
 
+/** SPI Data size transfert
+ */
+enum SPIDataSizeSelect {
+  DSS8bit,
+  DSS16bit
+};
+
 /** SPI transaction status
  */
 enum SPITransactionStatus {
@@ -107,7 +114,7 @@ struct spi_transaction {
   enum SPISlaveSelect select;
   enum SPIClockPolarity cpol;
   enum SPIClockPhase cpha;
-  struct SPIOptions options; // Architecture dependant options
+  enum SPIDataSizeSelect dss; // Architecture dependant options (LPC21) ?
   volatile enum SPITransactionStatus status;
 };
 
