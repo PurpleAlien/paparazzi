@@ -61,20 +61,21 @@ enum SPISlaveSelect {
 /** SPI clock phase control.
  * control when data are sampled (rising or falling edge of clock)
  * depending of the clock polarity
- * clear: 0, set: 1
+ * Mode 0: data sampled on first clock edge
+ * Mode 1: data sampled on second clock edge
  */
 enum SPIClockPhase {
-  SPICPHAClear,
-  SPICPHASet
+  SPICPHA_Mode0,
+  SPICPHA_Mode1
 };
 
 /** SPI clock polarity control.
- * clear (0) for clock idle low
- * set (1) for clock idle high
+ * Mode 0: clock idle low
+ * Mode 1: clock idle high
  */
 enum SPIClockPolarity {
-  SPICPOLClear,
-  SPICPOLSet
+  SPICPOL_Mode0,
+  SPICPOL_Mode1
 };
 
 /** SPI Data size transfer.

@@ -176,7 +176,7 @@ __attribute__ ((always_inline)) static inline void SpiTransmit(struct spi_periph
     p->tx_idx_buf++;
   }
   if (p->tx_idx_buf == t->length) {
-    SpiDisableTxi(p->reg_addr);
+    SpiDisableTxi(p);
   }
 }
 
@@ -198,7 +198,6 @@ __attribute__ ((always_inline)) static inline void SpiReceive(struct spi_periph*
 __attribute__ ((always_inline)) static inline void SpiInitBuf(struct spi_periph* p, struct spi_transaction* t) {
   p->rx_idx_buf = 0;
   p->tx_idx_buf = 0;
-  // t->status = ??
   SpiTransmit(p,t); // fill fifo
 }
 
@@ -207,9 +206,9 @@ __attribute__ ((always_inline)) static inline void SpiStart(struct spi_periph* p
   p->status = SPIRunning;
   t->status = SPITransRunning;
   // handle spi options (CPOL, CPHA, data size,...)
-  if (t->cpol == SPICPOLSet) SpiSetCPOL(p);
+  if (t->cpol == SPICPOL_Mode1) SpiSetCPOL(p);
   else SpiClearCPOL(p);
-  if (t->cpha == SPICPHASet) SpiSetCPHA(p);
+  if (t->cpha == SPICPHA_Mode1) SpiSetCPHA(p);
   else SpiClearCPHA(p);
   SpiSetDataSize(p, t->dss);
   // handle slave select
