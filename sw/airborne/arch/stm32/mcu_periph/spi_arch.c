@@ -32,12 +32,12 @@ static inline void Spi2SlaveUnselect(uint8_t slave)
     case 0:
       SPI2_SLAVE0_PORT->BSRR = SPI2_SLAVE0_PIN;
       break;
-#ifdef USE_SPI2_SLAVE1
+#if USE_SPI2_SLAVE1
     case 1:
       SPI2_SLAVE1_PORT->BSRR = SPI2_SLAVE1_PIN;
       break;
 #endif //USE_SPI2_SLAVE1
-#ifdef USE_SPI2_SLAVE2
+#if USE_SPI2_SLAVE2
     case 2:
       SPI2_SLAVE2_PORT->BSRR = SPI2_SLAVE2_PIN;
       break;
@@ -55,12 +55,12 @@ static inline void Spi2SlaveSelect(uint8_t slave)
     case 0:
       SPI2_SLAVE0_PORT->BRR = SPI2_SLAVE0_PIN;
       break;
-#ifdef USE_SPI2_SLAVE1
+#if USE_SPI2_SLAVE1
     case 1:
       SPI2_SLAVE1_PORT->BRR = SPI2_SLAVE1_PIN;
       break;
 #endif //USE_SPI2_SLAVE1
-#ifdef USE_SPI2_SLAVE2
+#if USE_SPI2_SLAVE2
     case 2:
       SPI2_SLAVE2_PORT->BRR = SPI2_SLAVE2_PIN;
       break;

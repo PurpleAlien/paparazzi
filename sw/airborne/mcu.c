@@ -46,7 +46,7 @@
 #ifdef USE_USB_SERIAL
 #include "mcu_periph/usb_serial.h"
 #endif
-#if defined USE_SPI0 || defined USE_SPI1 || defined USE_SPI2
+#if USE_SPI0 || USE_SPI1 || USE_SPI2
 #include "mcu_periph/spi.h"
 #endif
 #ifdef USE_DAC
@@ -100,16 +100,16 @@ void mcu_init(void) {
 #ifdef USE_USB_SERIAL
   VCOM_init();
 #endif
-#ifdef USE_SPI0
+#if USE_SPI0
   spi0_init();
 #endif
-#ifdef USE_SPI1
+#if USE_SPI1
   spi1_init();
 #endif
-#ifdef USE_SPI2
+#if USE_SPI2
   spi2_init();
 #endif
-#if defined USE_SPI0 || defined USE_SPI1 || defined USE_SPI2
+#if USE_SPI0 || USE_SPI1 || USE_SPI2
   spi_init_slaves();
 #endif
 #ifdef USE_DAC

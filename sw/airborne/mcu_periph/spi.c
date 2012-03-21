@@ -27,7 +27,7 @@
 
 #ifdef SPI_MASTER
 
-#ifdef USE_SPI0
+#if USE_SPI0
 
 struct spi_periph spi0;
 
@@ -38,7 +38,7 @@ void spi0_init(void) {
 
 #endif
 
-#ifdef USE_SPI1
+#if USE_SPI1
 
 struct spi_periph spi1;
 
@@ -49,7 +49,7 @@ void spi1_init(void) {
 
 #endif
 
-#ifdef USE_SPI2
+#if USE_SPI2
 
 struct spi_periph spi2;
 
@@ -76,4 +76,3 @@ uint8_t spi_buffer_length;
 volatile bool_t spi_message_received;
 
 #endif
-

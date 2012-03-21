@@ -29,7 +29,7 @@
 #ifndef SPI_H
 #define SPI_H
 
-//#ifdef USE_SPI
+//#if USE_SPI
 
 #include "std.h"
 
@@ -143,21 +143,21 @@ struct spi_periph {
 
 //extern uint8_t spi_nb_ovrn; //TODO SPI error struct
 
-#ifdef USE_SPI0
+#if USE_SPI0
 
 extern struct spi_periph spi0;
 extern void spi0_init(void);
 
 #endif
 
-#ifdef USE_SPI1
+#if USE_SPI1
 
 extern struct spi_periph spi1;
 extern void spi1_init(void);
 
 #endif
 
-#ifdef USE_SPI2
+#if USE_SPI2
 
 extern struct spi_periph spi2;
 extern void spi2_init(void);
@@ -207,4 +207,3 @@ void spi_slave_init(void);
 //#endif /* USE_SPI */
 
 #endif /* SPI_H */
-

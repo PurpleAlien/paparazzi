@@ -57,12 +57,12 @@
 
 __attribute__ ((always_inline)) static inline void SpiSlaveSelect(uint8_t slave) {
   switch (slave) {
-#ifdef USE_SPI_SLAVE0
+#if USE_SPI_SLAVE0
     case SPI_SLAVE0:
       SetBit(SPI_SELECT_SLAVE0_IOCLR, SPI_SELECT_SLAVE0_PIN);
       break;
 #endif
-#ifdef USE_SPI_SLAVE1
+#if USE_SPI_SLAVE1
     case SPI_SLAVE0:
       SetBit(SPI_SELECT_SLAVE1_IOCLR, SPI_SELECT_SLAVE1_PIN);
       break;
@@ -74,12 +74,12 @@ __attribute__ ((always_inline)) static inline void SpiSlaveSelect(uint8_t slave)
 
 __attribute__ ((always_inline)) static inline void SpiSlaveUnselect(uint8_t slave) {
   switch (slave) {
-#ifdef USE_SPI_SLAVE0
+#if USE_SPI_SLAVE0
     case SPI_SLAVE0:
       SetBit(SPI_SELECT_SLAVE0_IOSET, SPI_SELECT_SLAVE0_PIN);
       break;
 #endif
-#ifdef USE_SPI_SLAVE1
+#if USE_SPI_SLAVE1
     case SPI_SLAVE0:
       SetBit(SPI_SELECT_SLAVE1_IOSET, SPI_SELECT_SLAVE1_PIN);
       break;
@@ -232,7 +232,7 @@ __attribute__ ((always_inline)) static inline void SpiAutomaton(struct spi_perip
     SpiReceive(p, trans);
     SpiEnableRti(p);
   }
-  
+
   /* Rx fifo is not empty and no receive took place in the last 32 bits period */
   if (bit_is_set(((sspRegs_t *)(p->reg_addr))->mis, RTMIS)) {
     // handle slave unselect
@@ -270,7 +270,7 @@ __attribute__ ((always_inline)) static inline void SpiAutomaton(struct spi_perip
 
 //#include "led.h"  /* FIXME remove that */
 
-#ifdef USE_SPI0
+#if USE_SPI0
 
 // void spi0_ISR(void) __attribute__((naked));
 //
@@ -290,7 +290,7 @@ void spi0_hw_init(void) {
 #endif
 
 
-#ifdef USE_SPI1
+#if USE_SPI1
 
 /** default initial settings */
 #ifndef SPI1_VIC_SLOT
@@ -390,7 +390,7 @@ bool_t spi_submit(struct spi_periph* p, struct spi_transaction* t) {
 /** Init all used slaves and unselect them
  */
 void spi_init_slaves(void) {
-#ifdef USE_SPI_SLAVE0
+#if USE_SPI_SLAVE0
   /* setup slave0_select pin
    * slave0_select is output
    */
@@ -398,7 +398,7 @@ void spi_init_slaves(void) {
   SpiSlaveUnselect(SPI_SLAVE0);
 #endif
 
-#ifdef USE_SPI_SLAVE1
+#if USE_SPI_SLAVE1
   /* setup slave1_select pin
    * P1.25-16 are used as GPIO
    * FIXME SLAVEX_PINSEL should be defined in airframe header
@@ -409,7 +409,7 @@ void spi_init_slaves(void) {
   SpiSlaveUnselect(SPI_SLAVE1);
 #endif
 
-#ifdef USE_SPI_SLAVE2
+#if USE_SPI_SLAVE2
 #error SPI_SLAVE2 is not implemented yet, sorry
 #endif
 }
@@ -518,5 +518,3 @@ void SPI1_ISR(void) {
 }
 
 #endif /* SPI_SLAVE */
-
-
