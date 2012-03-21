@@ -358,11 +358,7 @@ void spi1_arch_init(void) {
 
 #endif
 
-/** Submit a spi transaction
- * @param p spi peripheral to be used
- * @param t spi transaction
- * @return return true if insertion to the transaction queue succed
- */
+
 bool_t spi_submit(struct spi_periph* p, struct spi_transaction* t) {
 
   uint8_t idx;
@@ -387,8 +383,7 @@ bool_t spi_submit(struct spi_periph* p, struct spi_transaction* t) {
   return TRUE;
 }
 
-/** Init all used slaves and unselect them
- */
+
 void spi_init_slaves(void) {
 #if USE_SPI_SLAVE0
   /* setup slave0_select pin
@@ -414,16 +409,10 @@ void spi_init_slaves(void) {
 #endif
 }
 
-/** Select a slave
- * @param slave slave id
- */
 void spi_slave_select(uint8_t slave) {
   SpiSlaveSelect(slave);
 }
 
-/** Unselect a slave
- * @param slave slave id
- */
 void spi_slave_unselect(uint8_t slave) {
   SpiSlaveUnselect(slave);
 }

@@ -185,11 +185,12 @@ extern void spi2_arch_init(void);
  */
 extern void spi_init(struct spi_periph* p);
 
-/** Initialize all used slaves
+/** Initialize all used slaves and uselect them.
  */
 extern void spi_init_slaves(void);
 
 /** Submit a spi transaction.
+ * Must be implemented by the underlying architecture
  * @param p spi peripheral to be used
  * @param t spi transaction
  * @return return true if insertion to the transaction queue succed
@@ -201,7 +202,7 @@ extern bool_t spi_submit(struct spi_periph* p, struct spi_transaction* t);
  */
 void spi_slave_select(uint8_t slave);
 
-/** Unselect a slave
+/** Unselect a slave.
  * @param slave slave id
  */
 void spi_slave_unselect(uint8_t slave);
