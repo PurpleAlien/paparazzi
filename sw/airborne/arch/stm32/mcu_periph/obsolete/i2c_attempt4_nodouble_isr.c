@@ -1,11 +1,11 @@
 #include "mcu_periph/i2c.h"
 
-#include <libopencm3/stm32/f1/rcc.h>
-#include <libopencm3/stm32/f1/gpio.h>
-#include <libopencm3/stm32/f1/scb.h>
-#include <libopencm3/stm32/nvic.h>
+#include <stm32/rcc.h>
+#include <stm32/gpio.h>
+#include <stm32/flash.h>
+#include <stm32/misc.h>
 
-//#define I2C_DEBUG_LED
+#define I2C_DEBUG_LED
 
 /////////// DEBUGGING //////////////
 // TODO: remove this
@@ -62,8 +62,6 @@ static inline void LED_ERROR(uint8_t base, uint8_t nr)
 //////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////
 
-/* Not used in libopencm3 implementation. Keeping commented for reference. */
-#if 0
 #ifdef USE_I2C1
 static I2C_InitTypeDef  I2C1_InitStruct = {
       .I2C_Mode = I2C_Mode_I2C,
@@ -82,14 +80,10 @@ static I2C_InitTypeDef  I2C2_InitStruct = {
       .I2C_OwnAddress1 = 0x00,
       .I2C_Ack = I2C_Ack_Enable,
       .I2C_AcknowledgedAddress = I2C_AcknowledgedAddress_7bit,
-//      .I2C_ClockSpeed = 37500	// Like on LPC
-      .I2C_ClockSpeed = 300000
+//      .I2C_ClockSpeed = 37000
+      .I2C_ClockSpeed = 400000
 };
 #endif
-#endif
-
-#define I2C1_CLOCK_SPEED 40000
-#define I2C2_CLOCK_SPEED 30000
 
 //////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////
@@ -100,9 +94,6 @@ static I2C_InitTypeDef  I2C2_InitStruct = {
 // Referring to STM32 manual:
 // -Doc ID 13902 Rev 11
 
-/* This macros are defined in libopencm3 already. Keeping commented for reference. */
-
-#if 0
 // Status Register 1
 
 #define I2C_SR1_BIT_SB			(1<<0)		// Start Condition Met
@@ -139,38 +130,16 @@ static I2C_InitTypeDef  I2C2_InitStruct = {
 #define I2C_CR2_BIT_ITEVTEN		(1<<9)		// Event Interrupt
 #define I2C_CR2_BIT_ITBUFEN		(1<<10)		// Buffer Interrupt
 
-#endif
-
-// Error bit mask
-// XXX: consider moving this define into libopencm3
-#define I2C_SR1_ERR_MASK                (I2C_SR1_SMBALERT | \
-	                                 I2C_SR1_TIMEOUT |  \
-					 I2C_SR1_PECERR |   \
-					 I2C_SR1_OVR |      \
-					 I2C_SR1_AF |       \
-					 I2C_SR1_ARLO |     \
-					 I2C_SR1_BERR)
 
 // Bit Control
 
 #define BIT_X_IS_SET_IN_REG(X,REG)	(((REG) & (X)) == (X))
 
-// disable and enable irq functions are not implemented in libopencm3 defining them here
-// XXX: consider moving this definitions into libopencm3
-static inline void __disable_irq(void)  { asm volatile ("cpsid i"); }
-static inline void __enable_irq(void)   { asm volatile ("cpsie i"); }
-
 // Critical Zones
 
-#define __I2C_REG_CRITICAL_ZONE_START	__disable_irq();
-#define __I2C_REG_CRITICAL_ZONE_STOP	__enable_irq();
+#define __I2C_REG_CRITICAL_ZONE_START
+#define __I2C_REG_CRITICAL_ZONE_STOP
 
-/* Interrupt service routine forward declarations. */
-/* XXX: This should be somehow integrated into libopencm3. */
-void i2c1_ev_isr(void);
-void i2c1_er_isr(void);
-void i2c2_ev_isr(void);
-void i2c2_er_isr(void);
 
 //////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////
@@ -296,10 +265,10 @@ static inline void LED_SHOW_ACTIVE_BITS(I2C_TypeDef *regs)
 }
 #endif
 
-static inline void PPRZ_I2C_SEND_STOP(u32 i2c)
+static inline void PPRZ_I2C_SEND_STOP(I2C_TypeDef *regs)
 {
   // Man: p722:  Stop generation after the current byte transfer or after the current Start condition is sent.
-	I2C_CR1(i2c) |= I2C_CR1_STOP;
+  regs->CR1 |= I2C_CR1_BIT_STOP;
 
 #ifdef I2C_DEBUG_LED
         LED2_ON();
@@ -313,9 +282,8 @@ static inline void PPRZ_I2C_SEND_STOP(u32 i2c)
 
 static inline void PPRZ_I2C_SEND_START(struct i2c_periph *periph)
 {
-  u32 i2c = (u32) periph->reg_addr;
+  I2C_TypeDef *regs = (I2C_TypeDef *) periph->reg_addr;
 
-  // Reset the buffer pointer to the first byte
   periph->idx_buf = 0;
 
 #ifdef I2C_DEBUG_LED
@@ -332,15 +300,26 @@ static inline void PPRZ_I2C_SEND_START(struct i2c_periph *periph)
 
 #endif
 
+/*
+  if (BIT_X_IS_SET_IN_REG( I2C_CR1_BIT_STOP, regs->CR1 ) )
+  {
+    regs->CR1 &= ~ I2C_CR1_BIT_STOP;
+  }
+*/
+
   // Enable Error IRQ, Event IRQ but disable Buffer IRQ
-  I2C_CR2(i2c) |= I2C_CR2_ITERREN;
-  I2C_CR2(i2c) |= I2C_CR2_ITEVTEN;
-  I2C_CR2(i2c) &= ~ I2C_CR2_ITBUFEN;
+  regs->CR2 |= I2C_CR2_BIT_ITERREN;
+  regs->CR2 |= I2C_CR2_BIT_ITEVTEN;
+  regs->CR2 &= ~ I2C_CR2_BIT_ITBUFEN;
 
   // Issue a new start
-  I2C_CR1(i2c) =  (I2C_CR1_START | I2C_CR1_PE);
+  regs->CR1 =  (I2C_CR1_BIT_START | I2C_CR1_BIT_PE);
   periph->status = I2CStartRequested;
 
+
+#ifdef I2C_DEBUG_LED
+  LED_SHOW_ACTIVE_BITS(regs);
+#endif
 }
 
 // STOP
@@ -349,7 +328,6 @@ static inline void PPRZ_I2C_SEND_START(struct i2c_periph *periph)
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 //
 //	SUBTRANSACTION SEQUENCES
-//	-We arrive here every time a ISR is called with no error
 
 enum STMI2CSubTransactionStatus {
   STMI2C_SubTra_Busy,
@@ -358,37 +336,32 @@ enum STMI2CSubTransactionStatus {
   STMI2C_SubTra_Error
 };
 
-// Doc ID 13902 Rev 11 p 710/1072
-// Transfer Sequence Diagram for Master Transmitter
-static inline enum STMI2CSubTransactionStatus stmi2c_send(u32 i2c, struct i2c_periph *periph, struct i2c_transaction *trans)
+static inline enum STMI2CSubTransactionStatus stmi2c_send(I2C_TypeDef *regs, struct i2c_periph *periph, struct i2c_transaction *trans)
 {
-  uint16_t SR1 = I2C_SR1(i2c);
+  uint16_t SR1 = regs->SR1;
 
   // Start Condition Was Just Generated
-  if (BIT_X_IS_SET_IN_REG( I2C_SR1_SB, SR1 ) )
+  if (BIT_X_IS_SET_IN_REG( I2C_SR1_BIT_SB, SR1 ) )
   {
     // Disable buffer interrupt
-    I2C_CR2(i2c) &= ~ I2C_CR2_ITBUFEN;
+    regs->CR2 &= ~ I2C_CR2_BIT_ITBUFEN;
     // Send Slave address and wait for ADDR interrupt
-    I2C_DR(i2c) = trans->slave_addr;
-    // Document the current Status
-    periph->status = I2CAddrWrSent;
+    regs->DR = trans->slave_addr;
   }
   // Address Was Sent
-  else if (BIT_X_IS_SET_IN_REG(I2C_SR1_ADDR, SR1) )
+  else if (BIT_X_IS_SET_IN_REG(I2C_SR1_BIT_ADDR, SR1) )
   {
-    // Now read SR2 to clear the ADDR status Bit
-    uint16_t SR2  __attribute__ ((unused)) = I2C_SR2(i2c);
+    // Now read SR2 to clear the ADDR
+    uint16_t SR2  __attribute__ ((unused)) = regs->SR2;
 
     // Maybe check we are transmitting (did not loose arbitration for instance)
-    // if (! BIT_X_IS_SET_IN_REG(I2C_SR2_TRA, SR2)) { }
-    // update: this should be caught by the ARLO error: so we will not arrive here
+    // if (! BIT_X_IS_SET_IN_REG(I2C_SR2_BIT_TRA, SR2)) { }
 
     // Send First max 2 bytes
-    I2C_DR(i2c) = trans->buf[0];
+    regs->DR = trans->buf[0];
     if (trans->len_w > 1)
     {
-      I2C_DR(i2c) = trans->buf[1];
+      regs->DR = trans->buf[1];
       periph->idx_buf = 2;
     }
     else
@@ -399,39 +372,35 @@ static inline enum STMI2CSubTransactionStatus stmi2c_send(u32 i2c, struct i2c_pe
     // Enable buffer-space available interrupt
     // only if there is more to send: wait for TXE, no more to send: wait for BTF
     if ( periph->idx_buf < trans->len_w)
-      I2C_CR2(i2c) |= I2C_CR2_ITBUFEN;
-
-    // Document the current Status
-    periph->status = I2CSendingByte;
+      regs->CR2 |= I2C_CR2_BIT_ITBUFEN;
   }
   // The buffer is not full anymore AND we were not waiting for BTF
-  else if ((BIT_X_IS_SET_IN_REG(I2C_SR1_TxE, SR1) ) && (BIT_X_IS_SET_IN_REG(I2C_CR2_ITBUFEN, I2C_CR2(i2c)))  )
+  else if ((BIT_X_IS_SET_IN_REG(I2C_SR1_BIT_TXE, SR1) ) && (BIT_X_IS_SET_IN_REG(I2C_CR2_BIT_ITBUFEN, regs->CR2))  )
   {
     // Send the next byte
-    I2C_DR(i2c) = trans->buf[periph->idx_buf];
+    regs->DR = trans->buf[periph->idx_buf];
     periph->idx_buf++;
 
     // All bytes Sent? Then wait for BTF instead
     if ( periph->idx_buf >= trans->len_w)
     {
       // Not interested anymore to know the buffer has space left
-      I2C_CR2(i2c) &= ~ I2C_CR2_ITBUFEN;
+      regs->CR2 &= ~ I2C_CR2_BIT_ITBUFEN;
       // Next interrupt will be BTF (or error)
     }
   }
   // BTF: means last byte was sent
-  else if (BIT_X_IS_SET_IN_REG(I2C_SR1_BTF, SR1) )
+  else if (BIT_X_IS_SET_IN_REG(I2C_SR1_BIT_BTF, SR1) )
   {
       if (trans->type == I2CTransTx)
       {
         // Tell the driver we are ready
         trans->status = I2CTransSuccess;
       }
-      // Otherwise we still need to do the receiving part
 
       return STMI2C_SubTra_Ready;
   }
-  else // Event Logic Error
+  else // Hardware error
   {
     return STMI2C_SubTra_Error;
   }
@@ -439,62 +408,49 @@ static inline enum STMI2CSubTransactionStatus stmi2c_send(u32 i2c, struct i2c_pe
   return STMI2C_SubTra_Busy;
 }
 
-// Doc ID 13902 Rev 11 p 714/1072
-// Transfer Sequence Diagram for Master Receiver for N=1
-static inline enum STMI2CSubTransactionStatus stmi2c_read1(u32 i2c, struct i2c_periph *periph, struct i2c_transaction *trans)
+static inline enum STMI2CSubTransactionStatus stmi2c_read1(I2C_TypeDef *regs, struct i2c_transaction *trans)
 {
-  uint16_t SR1 = I2C_SR1(i2c);
+  uint16_t SR1 = regs->SR1;
 
   // Start Condition Was Just Generated
-  if (BIT_X_IS_SET_IN_REG( I2C_SR1_SB, SR1 ) )
+  if (BIT_X_IS_SET_IN_REG( I2C_SR1_BIT_SB, SR1 ) )
   {
-    I2C_CR2(i2c) &= ~ I2C_CR2_ITBUFEN;
-    I2C_DR(i2c) = trans->slave_addr | 0x01;
-
-    // Document the current Status
-    periph->status = I2CAddrRdSent;
+    regs->CR2 &= ~ I2C_CR2_BIT_ITBUFEN;
+    regs->DR = trans->slave_addr | 0x01;
   }
   // Address Was Sent
-  else if (BIT_X_IS_SET_IN_REG(I2C_SR1_ADDR, SR1) )
+  else if (BIT_X_IS_SET_IN_REG(I2C_SR1_BIT_ADDR, SR1) )
   {
     // First Clear the ACK bit: after the next byte we do not want new bytes
-    I2C_CR1(i2c) &= ~ I2C_CR1_POS;
-    I2C_CR1(i2c) &= ~ I2C_CR1_ACK;
+    regs->CR1 &= ~ I2C_CR1_BIT_POS;
+    regs->CR1 &= ~ I2C_CR1_BIT_ACK;
 
     // --- next to steps MUST be executed together to avoid missing the stop
     __I2C_REG_CRITICAL_ZONE_START;
 
     // Only after setting ACK, read SR2 to clear the ADDR (next byte will start arriving)
-    uint16_t SR2 __attribute__ ((unused)) = I2C_SR2(i2c);
+    uint16_t SR2 __attribute__ ((unused)) = regs->SR2;
 
     // Schedule a Stop
-    PPRZ_I2C_SEND_STOP(i2c);
+    PPRZ_I2C_SEND_STOP(regs);
 
     __I2C_REG_CRITICAL_ZONE_STOP;
     // --- end of critical zone -----------
 
-    // Enable the RXNE: it will trigger as soon as the 1 byte is received to get the result
-    I2C_CR2(i2c) |= I2C_CR2_ITBUFEN;
-
-    // Document the current Status
-    periph->status = I2CReadingLastByte;
+    // Enable the RXNE to get the result
+    regs->CR2 |= I2C_CR2_BIT_ITBUFEN;
   }
-  // As soon as there is 1 byte ready to read, we have our byte
-  else if (BIT_X_IS_SET_IN_REG(I2C_SR1_RxNE, SR1) )
+  else if (BIT_X_IS_SET_IN_REG(I2C_SR1_BIT_RXNE, SR1) )
   {
-    I2C_CR2(i2c) &= ~ I2C_CR2_ITBUFEN;
-    trans->buf[0] = I2C_DR(i2c);
+    regs->CR2 &= ~ I2C_CR2_BIT_ITBUFEN;
+    trans->buf[0] = regs->DR;
 
     // We got all the results (stop condition might still be in progress but this is the last interrupt)
     trans->status = I2CTransSuccess;
 
-    // Document the current Status: 
-    // -the stop was actually already requested in the previous step
-    periph->status = I2CStopRequested;
-
     return STMI2C_SubTra_Ready_StopRequested;
   }
-  else // Event Logic Error
+  else // Hardware error
   {
     return STMI2C_SubTra_Error;
   }
@@ -502,69 +458,53 @@ static inline enum STMI2CSubTransactionStatus stmi2c_read1(u32 i2c, struct i2c_p
   return STMI2C_SubTra_Busy;
 }
 
-// Doc ID 13902 Rev 11 p 713/1072
-// Transfer Sequence Diagram for Master Receiver for N=2
-static inline enum STMI2CSubTransactionStatus stmi2c_read2(u32 i2c, struct i2c_periph *periph, struct i2c_transaction *trans)
+static inline enum STMI2CSubTransactionStatus stmi2c_read2(I2C_TypeDef *regs, struct i2c_transaction *trans)
 {
-  uint16_t SR1 = I2C_SR1(i2c);
+  uint16_t SR1 = regs->SR1;
 
   // Start Condition Was Just Generated
-  if (BIT_X_IS_SET_IN_REG( I2C_SR1_SB, SR1 ) )
+  if (BIT_X_IS_SET_IN_REG( I2C_SR1_BIT_SB, SR1 ) )
   {
-    // according to the datasheet: instantly shedule a NAK on the second received byte:
-    I2C_CR2(i2c) &= ~ I2C_CR2_ITBUFEN;
-    I2C_CR1(i2c) |= I2C_CR1_ACK;
-    I2C_CR1(i2c) |= I2C_CR1_POS;
-    I2C_DR(i2c) = trans->slave_addr | 0x01;
-
-    // Document the current Status
-    periph->status = I2CAddrRdSent;
+    regs->CR2 &= ~ I2C_CR2_BIT_ITBUFEN;
+    regs->CR1 |= I2C_CR1_BIT_ACK;
+    regs->CR1 |= I2C_CR1_BIT_POS;
+    regs->DR = trans->slave_addr | 0x01;
   }
   // Address Was Sent
-  else if (BIT_X_IS_SET_IN_REG(I2C_SR1_ADDR, SR1) )
+  else if (BIT_X_IS_SET_IN_REG(I2C_SR1_BIT_ADDR, SR1) )
   {
-    // --- make absolutely sure this command is not delayed too much after the previous:
-    // --- the NAK bits must be set before the first byte arrived: allow other interrupts here
-    __I2C_REG_CRITICAL_ZONE_START;
-
-    //       if transfer of DR was finished already then we will get too many bytes
     // BEFORE clearing ACK, read SR2 to clear the ADDR (next byte will start arriving)
     // clearing ACK after the byte transfer has already started will NACK the next (2nd)
-    uint16_t SR2 __attribute__ ((unused)) = I2C_SR2(i2c);
+    uint16_t SR2 __attribute__ ((unused)) = regs->SR2;
 
+    // --- make absolutely sure this command is not delayed too much after the previous:
+    __I2C_REG_CRITICAL_ZONE_START;
+    //       if transfer of DR was finished already then we will get too many bytes
     // NOT First Clear the ACK bit but only AFTER clearing ADDR
-    I2C_CR1(i2c) &= ~ I2C_CR1_ACK;
+    regs->CR1 &= ~ I2C_CR1_BIT_ACK;
 
     // Disable the RXNE and wait for BTF
-    I2C_CR2(i2c) &= ~ I2C_CR2_ITBUFEN;
+    regs->CR2 &= ~ I2C_CR2_BIT_ITBUFEN;
 
     __I2C_REG_CRITICAL_ZONE_STOP;
     // --- end of critical zone -----------
-
-    // We do not set the RxE but wait for both bytes to arrive using BTF
-
-    // Document the current Status
-    periph->status = I2CReadingByte;
   }
   // Receive buffer if full, master is halted: BTF
-  else if (BIT_X_IS_SET_IN_REG(I2C_SR1_BTF, SR1) )
+  else if (BIT_X_IS_SET_IN_REG(I2C_SR1_BIT_BTF, SR1) )
   {
     // Stop condition MUST be set BEFORE reading the DR
     // otherwise since there is new buffer space a new byte will be read
-    PPRZ_I2C_SEND_STOP(i2c);
+    PPRZ_I2C_SEND_STOP(regs);
 
-    // Document the current Status
-    periph->status = I2CStopRequested;
-
-    trans->buf[0] = I2C_DR(i2c);
-    trans->buf[1] = I2C_DR(i2c);
+    trans->buf[0] = regs->DR;
+    trans->buf[1] = regs->DR;
 
     // We got all the results
     trans->status = I2CTransSuccess;
 
     return STMI2C_SubTra_Ready_StopRequested;
   }
-  else // Event Logic Error
+  else // Hardware error
   {
     return STMI2C_SubTra_Error;
   }
@@ -572,27 +512,22 @@ static inline enum STMI2CSubTransactionStatus stmi2c_read2(u32 i2c, struct i2c_p
   return STMI2C_SubTra_Busy;
 }
 
-// Doc ID 13902 Rev 11 p 712/1072
-// Transfer Sequence Diagram for Master Receiver for N>2
-static inline enum STMI2CSubTransactionStatus stmi2c_readmany(u32 i2c, struct i2c_periph *periph, struct i2c_transaction *trans)
+static inline enum STMI2CSubTransactionStatus stmi2c_readmany(I2C_TypeDef *regs, struct i2c_periph *periph, struct i2c_transaction *trans)
 {
-  uint16_t SR1 = I2C_SR1(i2c);
+  uint16_t SR1 = regs->SR1;
 
   // Start Condition Was Just Generated
-  if (BIT_X_IS_SET_IN_REG( I2C_SR1_SB, SR1 ) )
+  if (BIT_X_IS_SET_IN_REG( I2C_SR1_BIT_SB, SR1 ) )
   {
-    I2C_CR2(i2c) &= ~ I2C_CR2_ITBUFEN;
+    regs->CR2 &= ~ I2C_CR2_BIT_ITBUFEN;
     // The first data byte will be acked in read many so the slave knows it should send more
-    I2C_CR1(i2c) &= ~ I2C_CR1_POS;
-    I2C_CR1(i2c) |= I2C_CR1_ACK;
+    regs->CR1 &= ~ I2C_CR1_BIT_POS;
+    regs->CR1 |= I2C_CR1_BIT_ACK;
     // Clear the SB flag
-    I2C_DR(i2c) = trans->slave_addr | 0x01;
-
-    // Document the current Status
-    periph->status = I2CAddrRdSent;
+    regs->DR = trans->slave_addr | 0x01;
   }
   // Address Was Sent
-  else if (BIT_X_IS_SET_IN_REG(I2C_SR1_ADDR, SR1) )
+  else if (BIT_X_IS_SET_IN_REG(I2C_SR1_BIT_ADDR, SR1) )
   {
     periph->idx_buf = 0;
 
@@ -600,23 +535,20 @@ static inline enum STMI2CSubTransactionStatus stmi2c_readmany(u32 i2c, struct i2
     // only enable if MORE than 3 bytes need to be read
     if (periph->idx_buf < (trans->len_r - 3))
     {
-      I2C_CR2(i2c) |= I2C_CR2_ITBUFEN;
+      regs->CR2 |= I2C_CR2_BIT_ITBUFEN;
     }
 
     // ACK is still on to get more DATA
     // Read SR2 to clear the ADDR (next byte will start arriving)
-    uint16_t SR2 __attribute__ ((unused)) = I2C_SR2(i2c);
-
-    // Document the current Status
-    periph->status = I2CReadingByte;
+    uint16_t SR2 __attribute__ ((unused)) = regs->SR2;
   }
   // one or more bytes are available AND we were interested in Buffer interrupts
-  else if ( (BIT_X_IS_SET_IN_REG(I2C_SR1_RxNE, SR1) ) && (BIT_X_IS_SET_IN_REG(I2C_CR2_ITBUFEN, I2C_CR2(i2c)))  )
+  else if ( (BIT_X_IS_SET_IN_REG(I2C_SR1_BIT_RXNE, SR1) ) && (BIT_X_IS_SET_IN_REG(I2C_CR2_BIT_ITBUFEN, regs->CR2))  )
   {
     // read byte until 3 bytes remain to be read (e.g. len_r = 6, -> idx=3 means idx 3,4,5 = 3 remain to be read
     if (periph->idx_buf < (trans->len_r - 3))
     {
-      trans->buf[periph->idx_buf] = I2C_DR(i2c);
+      trans->buf[periph->idx_buf] = regs->DR;
       periph->idx_buf ++;
     }
     // from : 3bytes -> last byte: do nothing
@@ -624,10 +556,10 @@ static inline enum STMI2CSubTransactionStatus stmi2c_readmany(u32 i2c, struct i2
     // finally: this was the last byte
     else if (periph->idx_buf >= (trans->len_r - 1))
     {
-      I2C_CR2(i2c) &= ~ I2C_CR2_ITBUFEN;
+      regs->CR2 &= ~ I2C_CR2_BIT_ITBUFEN;
 
       // Last Value
-      trans->buf[periph->idx_buf] = I2C_DR(i2c);
+      trans->buf[periph->idx_buf] = regs->DR;
       periph->idx_buf ++;
 
       // We got all the results
@@ -639,18 +571,18 @@ static inline enum STMI2CSubTransactionStatus stmi2c_readmany(u32 i2c, struct i2
     // Check for end of transaction: start waiting for BTF instead of RXNE
     if (periph->idx_buf < (trans->len_r - 3))
     {
-      I2C_CR2(i2c) |= I2C_CR2_ITBUFEN;
+      regs->CR2 |= I2C_CR2_BIT_ITBUFEN;
     }
     else // idx >= len-3: there are 3 bytes to be read
     {
       // We want to halt I2C to have sufficient time to clear ACK, so:
       // Stop listening to RXNE as it will be triggered infinitely since we did not empty the buffer
       // on the next (second in buffer) received byte BTF will be set (buffer full and I2C halted)
-      I2C_CR2(i2c) &= ~ I2C_CR2_ITBUFEN;
+      regs->CR2 &= ~ I2C_CR2_BIT_ITBUFEN;
     }
   }
   // Buffer is full while this was not a RXNE interrupt
-  else if (BIT_X_IS_SET_IN_REG(I2C_SR1_BTF, SR1) )
+  else if (BIT_X_IS_SET_IN_REG(I2C_SR1_BIT_BTF, SR1) )
   {
     // Now the shift register and data register contain data(n-2) and data(n-1)
     // And I2C is halted so we have time
@@ -659,149 +591,89 @@ static inline enum STMI2CSubTransactionStatus stmi2c_readmany(u32 i2c, struct i2
     __I2C_REG_CRITICAL_ZONE_START;
 
     // First we clear the ACK while the SCL is held low by BTF
-    I2C_CR1(i2c) &= ~ I2C_CR1_ACK;
+    regs->CR1 &= ~ I2C_CR1_BIT_ACK;
 
     // Now that ACK is cleared we read one byte: instantly the last byte is being clocked in...
-    trans->buf[periph->idx_buf] = I2C_DR(i2c);
+    trans->buf[periph->idx_buf] = regs->DR;
     periph->idx_buf ++;
 
     // Now the last byte is being clocked. Stop in MUST be set BEFORE the transfer of the last byte is complete
-    PPRZ_I2C_SEND_STOP(i2c);
+    PPRZ_I2C_SEND_STOP(regs);
 
     __I2C_REG_CRITICAL_ZONE_STOP;
     // --- end of critical zone -----------
 
-    // Document the current Status
-    periph->status = I2CStopRequested;
-
     // read the byte2 we had in the buffer (BTF means 2 bytes available)
-    trans->buf[periph->idx_buf] = I2C_DR(i2c);
+    trans->buf[periph->idx_buf] = regs->DR;
     periph->idx_buf ++;
 
     // Ask for an interrupt to read the last byte (which is normally still busy now)
     // The last byte will be received with RXNE
-    I2C_CR2(i2c) |= I2C_CR2_ITBUFEN;
+    regs->CR2 |= I2C_CR2_BIT_ITBUFEN;
   }
-  else // Event Logic Error
+  else // Hardware error
   {
+    // Error
+#ifdef I2C_DEBUG_LED
+        LED2_ON();
+        LED1_ON();
+	LED2_OFF();
+	LED1_OFF();
+#endif
     return STMI2C_SubTra_Error;
   }
 
   return STMI2C_SubTra_Busy;
 }
 
-////////////////////////////////////////////////
-// Restore bus conditions to normal after errors
 
-static inline void i2c_error(struct i2c_periph *periph)
+static inline void stmi2c_clear_pending_interrupts(I2C_TypeDef *regs)
 {
-#ifdef I2C_DEBUG_LED
-  uint8_t err_nr = 0;
-#endif
-  periph->errors->er_irq_cnt;
-  if ((I2C_SR1((u32)periph->reg_addr) & I2C_SR1_AF) != 0) { /* Acknowledge failure */
-    periph->errors->ack_fail_cnt++;
-    I2C_SR1((u32)periph->reg_addr) &= ~I2C_SR1_AF;
-#ifdef I2C_DEBUG_LED
-    err_nr = 1;
-#endif
-  }
-  if ((I2C_SR1((u32)periph->reg_addr) & I2C_SR1_BERR) != 0) {     /* Misplaced Start or Stop condition */
-    periph->errors->miss_start_stop_cnt++;
-    I2C_SR1((u32)periph->reg_addr) &= ~I2C_SR1_BERR;
-#ifdef I2C_DEBUG_LED
-    err_nr = 2;
-#endif
-  }
-  if ((I2C_SR1((u32)periph->reg_addr) & I2C_SR1_ARLO) != 0) {     /* Arbitration lost */
-    periph->errors->arb_lost_cnt++;
-    I2C_SR1((u32)periph->reg_addr) &= ~I2C_SR1_ARLO;
-#ifdef I2C_DEBUG_LED
-    err_nr = 3;
-#endif
-  }
-  if ((I2C_SR1((u32)periph->reg_addr) & I2C_SR1_OVR) != 0) {      /* Overrun/Underrun */
-    periph->errors->over_under_cnt++;
-    I2C_SR1((u32)periph->reg_addr) &= ~I2C_SR1_OVR;
-#ifdef I2C_DEBUG_LED
-    err_nr = 4;
-#endif
-  }
-  if ((I2C_SR1((u32)periph->reg_addr) & I2C_SR1_PECERR) != 0) {   /* PEC Error in reception */
-    periph->errors->pec_recep_cnt++;
-    I2C_SR1((u32)periph->reg_addr) &= ~I2C_SR1_PECERR;
-#ifdef I2C_DEBUG_LED
-    err_nr = 5;
-#endif
-  }
-  if ((I2C_SR1((u32)periph->reg_addr) & I2C_SR1_TIMEOUT) != 0) {  /* Timeout or Tlow error */
-    periph->errors->timeout_tlow_cnt++;
-    I2C_SR1((u32)periph->reg_addr) &= ~I2C_SR1_TIMEOUT;
-#ifdef I2C_DEBUG_LED
-    err_nr = 6;
-#endif
-  }
-  if ((I2C_SR1((u32)periph->reg_addr) & I2C_SR1_SMBALERT) != 0) { /* SMBus alert */
-    periph->errors->smbus_alert_cnt++;
-    I2C_SR1((u32)periph->reg_addr) &= ~I2C_SR1_SMBALERT;
-#ifdef I2C_DEBUG_LED
-    err_nr = 7;
-#endif
-  }
+  uint16_t SR1 = regs->SR1;
 
-#ifdef I2C_DEBUG_LED
-  LED_ERROR(20, err_nr);
-#endif
+  regs->CR2 &= ~ I2C_CR2_BIT_ITBUFEN;			// Disable TXE, RXNE
 
-  return;
-}
-
-
-static inline void stmi2c_clear_pending_interrupts(u32 i2c)
-{
-  uint16_t SR1 = I2C_SR1(i2c);
-
-  // Certainly do not wait for buffer interrupts:
-  // -------------------------------------------
-  I2C_CR2(i2c) &= ~ I2C_CR2_ITBUFEN;			// Disable TXE, RXNE
-
-  // Error interrupts are handled separately:
-  // ---------------------------------------
-
-  // Clear Event interrupt conditions:
-  // --------------------------------
+  //regs->CR1 &= ~ I2C_CR1_BIT_PE;		// Disable Periferial
+  //regs->CR1 |=   I2C_CR1_BIT_PE;		// Enable Periferial
 
   // Start Condition Was Generated
-  if (BIT_X_IS_SET_IN_REG( I2C_SR1_SB, SR1 ) )
+  if (BIT_X_IS_SET_IN_REG( I2C_SR1_BIT_SB, SR1 ) )
   {
     // SB: cleared by software when reading SR1 and writing to DR
-    I2C_DR(i2c) = 0x00;
+    regs->DR = 0x00;
   }
   // Address Was Sent
-  if (BIT_X_IS_SET_IN_REG(I2C_SR1_ADDR, SR1) )
+  if (BIT_X_IS_SET_IN_REG(I2C_SR1_BIT_ADDR, SR1) )
   {
     // ADDR: Cleared by software when reading SR1 and then SR2
-    uint16_t SR2 __attribute__ ((unused)) = I2C_SR2(i2c);
+    uint16_t SR2 __attribute__ ((unused)) = regs->SR2;
   }
   // Byte Transfer Finished
-  if (BIT_X_IS_SET_IN_REG(I2C_SR1_BTF, SR1) )
+  if (BIT_X_IS_SET_IN_REG(I2C_SR1_BIT_BTF, SR1) )
   {
     // SB: cleared by software when reading SR1 and reading/writing to DR
-    uint8_t dummy __attribute__ ((unused)) = I2C_DR(i2c);
-    I2C_DR(i2c) = 0x00;
+    uint8_t dummy __attribute__ ((unused)) = regs->DR;
+    regs->DR = 0x00;
+  }
+
+
+  // Still have a start sheduled
+//  if (BIT_X_IS_SET_IN_REG(I2C_CR1_BIT_START, regs->CR1) )
+  {
+    // Clear pending start conditions
+//    regs->CR1 &= ~ I2C_CR1_BIT_START;
   }
 
 }
 
 
-////////////////////////////////////////////////
-// Restore bus conditions to normal after errors
+static inline void i2c_error(struct i2c_periph *periph);
 
 static inline void i2c_irq(struct i2c_periph *periph)
 {
 
   /*
-	There are 7 possible event reasons to get here + all errors
+	There are 7 possible reasons to get here:
 
 	If IT_EV_FEN
 	-------------------------
@@ -810,15 +682,15 @@ static inline void i2c_irq(struct i2c_periph *periph)
 
 	1) SB		// Start Condition Success in Master mode
 	2) ADDR		// Address sent received Acknoledge
-	[ADDR10]	// -- 10bit address stuff: not used
-	[STOPF]		// -- only for slaves: master has no stop interrupt: not used
-	3) BTF		// I2C has stopped working (it is waiting for new data, all buffers are tx_empty/rx_full)
+	[3 ADDR10]	// -- 10bit address stuff
+	[4 STOPF]	// -- only for slaves: master has no stop interrupt
+	5) BTF		// I2C has stopped working (it is waiting for new data, all buffers are tx_empty/rx_full)
 
 	// Beware: using the buffered I2C has some interesting properties:
 	  -in master receive mode: BTF only occurs after the 2nd received byte: after the first byte is received it is
            in RD but the I2C can still receive a second byte. Only when the 2nd byte is received while the RxNE is 1
 	   then a BTF occurs (I2C can not continue receiving bytes or they will get lost). During BTF I2C is halted (SCL held low)
-	  -in master transmit mode: when writing a byte to WD, you instantly get a new TxE interrupt while the first is not
+	  -in master transmitmode: when writing a byte to WD, you instantly get a new TxE interrupt while the first is not
 	   transmitted yet. The byte was pushed to the I2C shift register and the buffer is ready for more. You can already
 	   fill new data in the buffer while the first is still being transmitted for max performance transmission.
 
@@ -826,21 +698,49 @@ static inline void i2c_irq(struct i2c_periph *periph)
            a new start in one go.
 
           -thanks to / because of this buffering and event sheduling there is not 1 interrupt per start / byte / stop
-           This also means you must think more in advance and a transaction could be popped from the transaction stack even before it's 
-           stop condition is actually generated.
+           This also means you must think more in advance and a transaction could be popped from the stack even before it is
+           actually completely transmitted. But then you would not know the result yet so you have to keep it until the result
+           is known.
 
-	// Beware: the order in which Status (and other register) is read determines how flags are cleared. 
-           You should NOT simply read SR1 & SR2 every time
+	// Beware: the order in which Status is read determines how flags are cleared. You should not just read SR1 & SR2 every time
 
 	If IT_EV_FEN AND IT_EV_BUF
 	--------------------------
 
-	Buffer event are not always wanted and are typically switched on during longer data transfers. Make sure to turn off in time.
+	Buffer event are not always wanted and are tipically switched on during longer data transfers. Make sure to turn off in time.
 
-	4) RxNE
-	5) TxE
+	6) RxNE
+	7) TxE
 
 	--------------------------------------------------------------------------------------------------
+	// This driver uses only a subset of the pprz_i2c_states for several reasons:
+	// -we have less interrupts than the I2CStatus states (for efficiency)
+	// -STM32 has such a powerfull I2C engine with plenty of status register flags that
+            only little extra status information needs to be stored.
+
+       // Status is re-used (abused) to remember the last COMMAND THAT WAS SENT to the STM I2C hardware.
+
+// TODO: check which are used
+	enum I2CStatus {
+	  I2CIdle,			// No more last command
+
+	  I2CStartRequested,		// Last command was start
+	  I2CRestartRequested,		// Last command was restart
+	  I2CStopRequested,		// Very important to not send double stop conditions
+
+	  I2CSendingByte,		// Some address/data operation
+
+	  // Following are not used
+	  I2CReadingByte,
+	  I2CAddrWrSent,
+	  I2CAddrRdSent,
+	  I2CSendingLastByte,
+	  I2CReadingLastByte,
+	  I2CComplete,
+	  I2CFailed
+	};
+
+	---------
 
 	The STM waits indefinately (holding SCL low) for user interaction:
 	a) after a master-start (waiting for address)
@@ -852,36 +752,40 @@ static inline void i2c_irq(struct i2c_periph *periph)
 
 	-The STM I2C stalls indefinately when a stop condition was attempted that
 	did not succeed. The BUSY flag remains on.
-        -There is no STOP interrupt.
-
-  	Caution Reading the status:
-	- Caution: this clears several flags and can start transmissions etc...
-	- Certain flags like STOP / (N)ACK need to be guaranteed to be set before
-	  the transmission of the byte is finished. At higher clock rates that can be
-	  quite fast: so we allow no other interrupt to be triggered in between
-	  reading the status and setting all needed flags
+        -There is no STOP interrupt: use needs another way to finish.
 
    */
 
-  // Here we go ...
 
-  // Apparently we got an I2C interrupt: EVT BUF or ERR
+  ///////////////////////////////////////////////////////////////////////////////////
+  // Reading the status:
+  // - Caution: this clears several flags and can start transmissions etc...
+  // - Certain flags like STOP / (N)ACK need to be guaranteed to be set before
+  //   the transmission of the byte is finished. At higher clock rates that can be
+  //   quite fast: so we allow no other interrupt to be triggered in between
+  //   reading the status and setting all needed flags
+
+  // Direct Access to the I2C Registers
+  // Do not read SR2 as it might start the reading while an (n)ack bit might be needed first
+  I2C_TypeDef *regs = (I2C_TypeDef *) periph->reg_addr;
 
 #ifdef I2C_DEBUG_LED
-  // Notify ISR is triggered
   LED1_ON();
   LED1_OFF();
 #endif
 
-  // Save Some Direct Access to the I2C Registers ...
-  u32 i2c = (u32) periph->reg_addr;
 
-  /////////////////////////////
-  // Check if we were ready ...
+  ///////////////////////////////////////////////////////////////////////////////////////////////////////
+  ///////////////////////////////////////////////////////////////////////////////////////////////////////
+  //
+  //	TRANSACTION HANDLER
+
+  enum STMI2CSubTransactionStatus ret = 0;
+
+  ///////////////////////
+  // Nothing Left To Do
   if (periph->trans_extract_idx == periph->trans_insert_idx)
   {
-    // Nothing Left To Do
-
 #ifdef I2C_DEBUG_LED
         LED2_ON();
         LED1_ON();
@@ -894,35 +798,29 @@ static inline void i2c_irq(struct i2c_periph *periph)
 
     // If we still get an interrupt but there are no more things to do
     // (which can happen if an event was sheduled just before a bus error occurs)
-    // (or can happen if both error and event interrupts were called together [the 2nd will then get this error])
-
-    // since there is nothing more to do: its easy: just stop: clear all interrupt generating bits
+    // then its easy: just stop: clear all interrupt generating bits
 
     // Count The Errors
     i2c_error(periph);
 
     // Clear Running Events
-    stmi2c_clear_pending_interrupts(i2c);
+    stmi2c_clear_pending_interrupts(regs);
 
     // Mark this as a special error
-    periph->errors->last_unexpected_event++;
+    periph->errors->unexpected_event_cnt++;
 
-    // Document the current Status
     periph->status = I2CIdle;
 
-    // There are no transactions anymore: return
-    // further-on in this routine we need a transaction pointer: so we are not allowed to continue
+    // There are no transactions anymore:
+    // furtheron we need a transaction pointer: so we are not allowed to continue
     return;
   }
 
-  // get the I2C transaction we were working on ...
-
-  enum STMI2CSubTransactionStatus ret = 0;
   struct i2c_transaction* trans = periph->trans[periph->trans_extract_idx];
 
   ///////////////////////////
   // If there was an error:
-  if (( I2C_SR1(i2c) & I2C_SR1_ERR_MASK ) != 0x0000)
+  if (( regs->SR1 & I2C_SR1_BITS_ERR ) != 0x0000)
   {
 
 #ifdef I2C_DEBUG_LED
@@ -934,56 +832,61 @@ static inline void i2c_irq(struct i2c_periph *periph)
         LED_SHOW_ACTIVE_BITS(regs);
 #endif
 
-    // Notify everyone about the error ...
-
     // Set result in transaction
     trans->status = I2CTransFailed;
 
-    // Document the current Status
-    periph->status = I2CFailed;
+    // Prepare for next
+    ret = STMI2C_SubTra_Ready;
 
     // Make sure a TxRx does not Restart
     trans->type = I2CTransRx;
+
+/*
+    // There are 2 types of errors: some need a STOP, some better do without: Following will not get an extra stop
+    if (
+           // Lost Arbitration
+           (BIT_X_IS_SET_IN_REG( I2C_SR1_BIT_ERR_ARLO, regs->SR1 ) )
+           // Buss Error When Master Only
+        || ((BIT_X_IS_SET_IN_REG( I2C_SR1_BIT_ERR_BUS,  regs->SR1 ) )  &&  (!BIT_X_IS_SET_IN_REG( I2C_SR2_BIT_MSL,  regs->SR2 ) ))
+        || (BIT_X_IS_SET_IN_REG( I2C_SR1_BIT_ERR_OVR,  regs->SR1 ) )
+       )
+    {
+      ret = STMI2C_SubTra_Error;
+    }
+*/
 
     // Count The Errors
     i2c_error(periph);
 
     // Clear Running Events
-    stmi2c_clear_pending_interrupts(i2c);
-
-    // Now continue as if everything was normal from now on
-    ret = STMI2C_SubTra_Ready;
+    stmi2c_clear_pending_interrupts(regs);
 
   }
+
 
   ///////////////////////////
   // Normal Event:
   else
   {
 
-    ///////////////////////////////////////////////////////////////////////////////////////////////////////
-    ///////////////////////////////////////////////////////////////////////////////////////////////////////
-    //
-    //	SUB-TRANSACTION HANDLER
-
     if (trans->type == I2CTransRx) // TxRx are converted to Rx after the Tx Part
     {
       switch (trans->len_r)
       {
         case 1:
-          ret = stmi2c_read1(i2c,periph,trans);
+          ret = stmi2c_read1(regs,trans);
           break;
         case 2:
-          ret = stmi2c_read2(i2c,periph,trans);
+          ret = stmi2c_read2(regs,trans);
           break;
         default:
-          ret = stmi2c_readmany(i2c,periph,trans);
+          ret = stmi2c_readmany(regs,periph, trans);
           break;
       }
     }
     else // TxRx or Tx
     {
-      ret = stmi2c_send(i2c,periph,trans);
+      ret = stmi2c_send(regs,periph,trans);
     }
   }
 
@@ -991,18 +894,25 @@ static inline void i2c_irq(struct i2c_periph *periph)
   // Sub-transaction has finished
   if (ret != STMI2C_SubTra_Busy)
   {
-    // Ready or SubTraError
-    // -ready: with or without stop already asked
-
-    // In case of unexpected event condition during subtransaction handling:
-    if (ret == STMI2C_SubTra_Error)
+    // If a restart is not needed
+    if (trans->type != I2CTransTxRx)
     {
-      // Tell everyone about the subtransaction error:
-      // this is the previously called SPURRIOUS INTERRUPT
-      periph->status = I2CFailed;
-      trans->type = I2CTransRx;		// Avoid possible restart
-      trans->status = I2CTransFailed;	// Notify Ready
-      periph->errors->unexpected_event_cnt++;
+      // Ready, no stop condition set yet
+      if (ret == STMI2C_SubTra_Ready)
+      {
+
+        // Program a stop
+        PPRZ_I2C_SEND_STOP(regs);
+
+        // Silent any BTF that would occur before STOP is executed
+        regs->DR = 0x00;
+      }
+
+      // In case of unexpected condition: e.g. not slave, no event
+      if (ret == STMI2C_SubTra_Error)
+      {
+
+        trans->status = I2CTransFailed;
 
     // Error
 #ifdef I2C_DEBUG_LED
@@ -1010,37 +920,15 @@ static inline void i2c_irq(struct i2c_periph *periph)
         LED1_ON();
 	LED2_OFF();
 	LED1_OFF();
-
-        LED_SHOW_ACTIVE_BITS(regs);
 #endif
 
-      // Clear Running Events
-      stmi2c_clear_pending_interrupts(i2c);
-    }
+        LED_SHOW_ACTIVE_BITS(regs);
 
-    // RxTx -> Restart and do Rx part
-    if (trans->type == I2CTransTxRx)
-    {
-      trans->type = I2CTransRx;
-      periph->status = I2CStartRequested;
-      I2C_CR1(i2c) |= I2C_CR1_START;
+        // Clear Running Events
+        stmi2c_clear_pending_interrupts(regs);
 
-      // Silent any BTF that would occur before SB
-      I2C_DR(i2c) = 0x00;
-    }
-    // If a restart is not needed: Rx part or Tx-only
-    else
-    {
-      // Ready, no stop condition set yet
-      if (ret == STMI2C_SubTra_Ready)
-      {
-
-        // Program a stop
-        PPRZ_I2C_SEND_STOP(i2c);
-
-        // Silent any BTF that would occur before STOP is executed
-        I2C_DR(i2c) = 0x00;
       }
+
 
       // Jump to the next transaction
       periph->trans_extract_idx++;
@@ -1072,10 +960,69 @@ static inline void i2c_irq(struct i2c_periph *periph)
         PPRZ_I2C_SEND_START(periph);
 // ------
      }
+
+    }
+    // RxTx -> Restart and do Rx part
+    else
+    {
+      trans->type = I2CTransRx;
+      periph->status = I2CStartRequested;
+      regs->CR1 |= I2C_CR1_BIT_START;
+
+      // Silent any BTF that would occur before SB
+      regs->DR = 0x00;
     }
   }
 
   return;
+}
+
+static inline void i2c_error(struct i2c_periph *periph)
+{
+  uint8_t err_nr = 0;
+  periph->errors->er_irq_cnt;
+  if (I2C_GetITStatus(periph->reg_addr, I2C_IT_AF)) {       /* Acknowledge failure */
+    periph->errors->ack_fail_cnt++;
+    I2C_ClearITPendingBit(periph->reg_addr, I2C_IT_AF);
+    err_nr = 1;
+  }
+  if (I2C_GetITStatus(periph->reg_addr, I2C_IT_BERR)) {     /* Misplaced Start or Stop condition */
+    periph->errors->miss_start_stop_cnt++;
+    I2C_ClearITPendingBit(periph->reg_addr, I2C_IT_BERR);
+    err_nr = 2;
+  }
+  if (I2C_GetITStatus(periph->reg_addr, I2C_IT_ARLO)) {     /* Arbitration lost */
+    periph->errors->arb_lost_cnt++;
+    I2C_ClearITPendingBit(periph->reg_addr, I2C_IT_ARLO);
+    err_nr = 3;
+  }
+  if (I2C_GetITStatus(periph->reg_addr, I2C_IT_OVR)) {      /* Overrun/Underrun */
+    periph->errors->over_under_cnt++;
+    I2C_ClearITPendingBit(periph->reg_addr, I2C_IT_OVR);
+    err_nr = 4;
+  }
+  if (I2C_GetITStatus(periph->reg_addr, I2C_IT_PECERR)) {   /* PEC Error in reception */
+    periph->errors->pec_recep_cnt++;
+    I2C_ClearITPendingBit(periph->reg_addr, I2C_IT_PECERR);
+    err_nr = 5;
+  }
+  if (I2C_GetITStatus(periph->reg_addr, I2C_IT_TIMEOUT)) {  /* Timeout or Tlow error */
+    periph->errors->timeout_tlow_cnt++;
+    I2C_ClearITPendingBit(periph->reg_addr, I2C_IT_TIMEOUT);
+    err_nr = 6;
+  }
+  if (I2C_GetITStatus(periph->reg_addr, I2C_IT_SMBALERT)) { /* SMBus alert */
+    periph->errors->smbus_alert_cnt++;
+    I2C_ClearITPendingBit(periph->reg_addr, I2C_IT_SMBALERT);
+    err_nr = 7;
+  }
+
+#ifdef I2C_DEBUG_LED
+  LED_ERROR(20, err_nr);
+#endif
+
+  return;
+
 }
 
 
@@ -1088,20 +1035,22 @@ static inline void i2c_irq(struct i2c_periph *periph)
   }
 */
 
+//#endif /* USE_I2C2 */
+
+
+
 
 #ifdef USE_I2C1
 
 struct i2c_errors i2c1_errors;
-volatile uint32_t i2c1_watchdog_counter;
 
 void i2c1_hw_init(void) {
 
-  i2c1.reg_addr = (void *)I2C1;
-  i2c1.init_struct = NULL;
-  i2c1.scl_pin = GPIO_I2C1_SCL;
-  i2c1.sda_pin = GPIO_I2C1_SDA;
+  i2c1.reg_addr = I2C1;
+  i2c1.init_struct = &I2C1_InitStruct;
+  i2c1.scl_pin = GPIO_Pin_6;
+  i2c1.sda_pin = GPIO_Pin_7;
   i2c1.errors = &i2c1_errors;
-  i2c1_watchdog_counter = 0;
 
   /* zeros error counter */
   ZEROS_ERR_COUNTER(i2c1_errors);
@@ -1112,62 +1061,56 @@ void i2c1_hw_init(void) {
 #else
 
   /* reset peripheral to default state ( sometimes not achieved on reset :(  ) */
-  //i2c_reset(I2C1);
+  //I2C_DeInit(I2C1);
 
-  /* Configure priority grouping 0 bits for pre-emption priority and 4 bits for sub-priority. */
-  scb_set_priority_grouping(SCB_AIRCR_PRIGROUP_NOGROUP_SUB16);
+  NVIC_PriorityGroupConfig(NVIC_PriorityGroup_0);
+  NVIC_InitTypeDef  NVIC_InitStructure;
 
   /* Configure and enable I2C1 event interrupt --------------------------------*/
-  nvic_set_priority(NVIC_I2C1_EV_IRQ, 0);
-  nvic_enable_irq(NVIC_I2C1_EV_IRQ);
+  NVIC_InitStructure.NVIC_IRQChannel = I2C1_EV_IRQn;
+  NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 0;
+  NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;
+  NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
+  NVIC_Init(&NVIC_InitStructure);
 
   /* Configure and enable I2C1 err interrupt ----------------------------------*/
-  nvic_set_priority(NVIC_I2C1_ER_IRQ, 1);
-  nvic_enable_irq(NVIC_I2C1_ER_IRQ);
+  NVIC_InitStructure.NVIC_IRQChannel = I2C1_ER_IRQn;
+  NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 0;
+  NVIC_InitStructure.NVIC_IRQChannelSubPriority = 1;
+  NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
+  NVIC_Init(&NVIC_InitStructure);
 
   /* Enable peripheral clocks -------------------------------------------------*/
   /* Enable I2C1 clock */
-  rcc_peripheral_enable_clock(&RCC_APB1ENR, RCC_APB1ENR_I2C1EN);
+  RCC_APB1PeriphClockCmd(RCC_APB1Periph_I2C1, ENABLE);
   /* Enable GPIOB clock */
-  rcc_peripheral_enable_clock(&RCC_APB2ENR, RCC_APB2ENR_IOPBEN);
+  RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOB, ENABLE);
 
-  gpio_set_mode(GPIOB, GPIO_MODE_OUTPUT_2_MHZ,
-	        GPIO_CNF_OUTPUT_ALTFN_OPENDRAIN,
-	        i2c1.scl_pin | i2c1.sda_pin);
+  GPIO_InitTypeDef GPIO_InitStructure;
+  GPIO_InitStructure.GPIO_Pin = i2c1.scl_pin | i2c1.sda_pin;
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz;
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_OD;
+  GPIO_Init(GPIOB, &GPIO_InitStructure);
 
-  i2c_reset(I2C1);
+  I2C_DeInit(I2C1);
 
   // enable peripheral
-  i2c_peripheral_enable(I2C1);
+  I2C_Cmd(I2C1, ENABLE);
 
-  /*
-   * XXX: there is a function to do that already in libopencm3 but I am not
-   * sure if it is correct, using direct register instead (esden)
-   */
-  //i2c_set_own_7bit_slave_address(I2C1, 0);
-  I2C_OAR1(I2C1) = 0 | 0x4000;
+  I2C_Init(I2C1, i2c1.init_struct);
 
   // enable error interrupts
-  I2C_CR2(I2C1) |= I2C_CR2_ITERREN;
+  I2C_ITConfig(I2C1, I2C_IT_ERR, ENABLE);
 
-  i2c_setbitrate(&i2c1, I2C2_CLOCK_SPEED);
 #endif
 }
 
-void i2c1_ev_isr(void) {
-  u32 i2c = (u32) i2c1.reg_addr;
-  I2C_CR2(i2c) &= ~I2C_CR2_ITERREN;
+void i2c1_ev_irq_handler(void) {
   i2c_irq(&i2c1);
-  i2c1_watchdog_counter = 0;
-  I2C_CR2(i2c) |= I2C_CR2_ITERREN;
 }
 
-void i2c1_er_isr(void) {
-  u32 i2c = (u32) i2c1.reg_addr;
-  I2C_CR2(i2c) &= ~I2C_CR2_ITEVTEN;
+void i2c1_er_irq_handler(void) {
   i2c_irq(&i2c1);
-  i2c1_watchdog_counter = 0;
-  I2C_CR2(i2c) |= I2C_CR2_ITEVTEN;
 }
 
 #endif /* USE_I2C1 */
@@ -1175,158 +1118,87 @@ void i2c1_er_isr(void) {
 #ifdef USE_I2C2
 
 struct i2c_errors i2c2_errors;
-volatile uint32_t i2c2_watchdog_counter;
 
 void i2c2_hw_init(void) {
 
-  i2c2.reg_addr = (void *)I2C2;
-  i2c2.init_struct = NULL;
-  i2c2.scl_pin = GPIO_I2C2_SCL;
-  i2c2.sda_pin = GPIO_I2C2_SDA;
+  i2c2.reg_addr = I2C2;
+  i2c2.init_struct = &I2C2_InitStruct;
+  i2c2.scl_pin = GPIO_Pin_10;
+  i2c2.sda_pin = GPIO_Pin_11;
   i2c2.errors = &i2c2_errors;
-  i2c2_watchdog_counter = 0;
 
   /* zeros error counter */
   ZEROS_ERR_COUNTER(i2c2_errors);
 
   /* reset peripheral to default state ( sometimes not achieved on reset :(  ) */
-  //i2c_reset(I2C2);
+  //I2C_DeInit(I2C2);
 
-  /* Configure priority grouping 0 bits for pre-emption priority and 4 bits for sub-priority. */
-  scb_set_priority_grouping(SCB_AIRCR_PRIGROUP_NOGROUP_SUB16);
+  NVIC_PriorityGroupConfig(NVIC_PriorityGroup_0);
+  NVIC_InitTypeDef  NVIC_InitStructure;
 
   /* Configure and enable I2C2 event interrupt --------------------------------*/
-  nvic_set_priority(NVIC_I2C2_EV_IRQ, 0);
-  nvic_enable_irq(NVIC_I2C2_EV_IRQ);
+  NVIC_InitStructure.NVIC_IRQChannel = I2C2_EV_IRQn;
+  NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 0;
+  NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;
+  NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
+  NVIC_Init(&NVIC_InitStructure);
 
   /* Configure and enable I2C2 err interrupt ----------------------------------*/
-  nvic_set_priority(NVIC_I2C2_ER_IRQ, 1);
-  nvic_enable_irq(NVIC_I2C2_ER_IRQ);
+  NVIC_InitStructure.NVIC_IRQChannel = I2C2_ER_IRQn;
+  NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 0;
+  NVIC_InitStructure.NVIC_IRQChannelSubPriority = 1;
+  NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
+  NVIC_Init(&NVIC_InitStructure);
 
   /* Enable peripheral clocks -------------------------------------------------*/
   /* Enable I2C2 clock */
-  rcc_peripheral_enable_clock(&RCC_APB1ENR, RCC_APB1ENR_I2C2EN);
+  RCC_APB1PeriphClockCmd(RCC_APB1Periph_I2C2, ENABLE);
   /* Enable GPIOB clock */
-  rcc_peripheral_enable_clock(&RCC_APB2ENR, RCC_APB2ENR_IOPBEN);
+  RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOB, ENABLE);
 
-  gpio_set_mode(GPIOB, GPIO_MODE_OUTPUT_2_MHZ,
-	        GPIO_CNF_OUTPUT_ALTFN_OPENDRAIN,
-	        i2c2.scl_pin | i2c2.sda_pin);
+  GPIO_InitTypeDef GPIO_InitStructure;
+  GPIO_InitStructure.GPIO_Pin = i2c2.scl_pin | i2c2.sda_pin;
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz;
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_OD;
+  GPIO_Init(GPIOB, &GPIO_InitStructure);
 
-  i2c_reset(I2C2);
+  I2C_DeInit(I2C2);
 
   // enable peripheral
-  i2c_peripheral_enable(I2C2);
+  I2C_Cmd(I2C2, ENABLE);
 
-  /*
-   * XXX: there is a function to do that already in libopencm3 but I am not
-   * sure if it is correct, using direct register instead (esden)
-   */
-  //i2c_set_own_7bit_slave_address(I2C2, 0);
-  I2C_OAR1(I2C2) = 0 | 0x4000;
+  I2C_Init(I2C2, i2c2.init_struct);
 
   // enable error interrupts
-  I2C_CR2(I2C1) |= I2C_CR2_ITERREN;
+  I2C_ITConfig(I2C2, I2C_IT_ERR, ENABLE);
 
-  i2c_setbitrate(&i2c2, I2C2_CLOCK_SPEED);
 }
 
-void i2c2_ev_isr(void) {
-  u32 i2c = (u32) i2c2.reg_addr;
-  I2C_CR2(i2c) &= ~I2C_CR2_ITERREN;
+
+
+void i2c2_ev_irq_handler(void) {
   i2c_irq(&i2c2);
-  i2c2_watchdog_counter = 0;
-  I2C_CR2(i2c) |= I2C_CR2_ITERREN;
 }
 
-void i2c2_er_isr(void) {
-  u32 i2c = (u32) i2c2.reg_addr;
-  I2C_CR2(i2c) &= ~I2C_CR2_ITEVTEN;
+void i2c2_er_irq_handler(void) {
   i2c_irq(&i2c2);
-  i2c2_watchdog_counter = 0;
-  I2C_CR2(i2c) |= I2C_CR2_ITEVTEN;
 }
 
 #endif /* USE_I2C2 */
 
-//////////////////////////////////////////////////
-// Set Bitrate to Match your application:
-// -short wires, low capacitance bus: IMU: high speed
-// -long wires with a lot of capacitance: motor controller: put speed as low as possible
 
 void i2c_setbitrate(struct i2c_periph *periph, int bitrate)
 {
-  // If NOT Busy
   if (i2c_idle(periph))
   {
-    volatile int devider;
-    volatile int risetime;
-
-    u32 i2c = (u32) periph->reg_addr;
-
-/*****************************************************
-	Bitrate:
-
-	-CR2 + CCR + TRISE registers
-	-only change when PE=0
-
-	e.g.
-
-	10kHz:  36MHz + Standard 0x708 + 0x25
-	70kHz:  36MHz + Standard 0x101 +
-	400kHz: 36MHz + Fast 0x1E      + 0xb
-
-      // 1) Program peripheral input clock CR2: to get correct timings
-      // 2) Configure clock control registers
-      // 3) Configure rise time register
-******************************************************/
-
-    if (bitrate < 3000)
-      bitrate = 3000;
-
-    // 36MHz, fast scl: 2counts low 1 count high -> / 3:
-    devider = 18000 / (bitrate/1000);
-
-    // never allow faster than 600kbps
-    if (devider < 20)
-      devider = 20;
-
-    // no overflow either
-    if (devider >=4095)
-      devider = 4095;
-
-    // risetime can be up to 1/6th of the period
-    risetime = 1000000 / (bitrate/1000) / 6 / 28;
-
-    if (risetime < 10)
-      risetime = 10;
-
-    // more will overflow the register: for more you should lower the FREQ
-    if (risetime >=31)
-      risetime = 31;
-
-    // we do not expect an interrupt as the interface should have been idle, but just in case...
-    __disable_irq(); // this code is in user space: 
-
-    // CCR can only be written when PE is disabled
-     // p731 note 5
-    I2C_CR1(i2c) &= ~ I2C_CR1_PE;
-
-    // 1)
-    I2C_CR2(i2c) = 0x0324;
-    // 2)
-    //I2C_CCR(i2c) = 0x8000 + devider;
-    I2C_CCR(i2c) = 0x0000 + devider;
-    // 3)
-    I2C_TRISE(i2c) = risetime;
-
-    // Re-Enable
-    I2C_CR1(i2c) |=   I2C_CR1_PE;
-
-    __enable_irq();
+    if (periph == &i2c2)
+    {
+      I2C2_InitStruct.I2C_ClockSpeed = bitrate;
+      I2C_Init(I2C2, i2c2.init_struct);
+    }
 
 #ifdef I2C_DEBUG_LED
-        __disable_irq(); // this code is in user space: 
+        __disable_irq();
 
         LED2_ON();
         LED1_ON();
@@ -1343,27 +1215,36 @@ void i2c_setbitrate(struct i2c_periph *periph, int bitrate)
    }
 }
 
-
-// TODO: TODO: TODO: 
-// Watchdog timer
 void i2c_event(void)
 {
+  static uint32_t cnt = 0;
+  //I2C_TypeDef *regs;
+  cnt++;
+  if (cnt > 10000) cnt = 0;
+
+#ifndef I2C_DEBUG_LED
 #ifdef USE_I2C1
-  i2c1_watchdog_counter++;
+  if (i2c1.status == I2CIdle)
+  {
+    if (i2c_idle(&i2c1))
+    {
+      __disable_irq();
+      // More work to do
+      if (i2c1.trans_extract_idx != i2c1.trans_insert_idx)
+      {
+        // Restart transaction doing the Rx part now
+        PPRZ_I2C_SEND_START(&i2c1);
+      }
+      __enable_irq();
+    }
+  }
+#endif
 #endif
 
 #ifdef USE_I2C2
-  i2c2_watchdog_counter++;
-
-  if (i2c2_watchdog_counter > 10000)
-  {
-    i2c2.errors->timeout_tlow_cnt++;
-    i2c2_watchdog_counter = 0;
-  }
-
 
 #ifdef I2C_DEBUG_LED
-  if (i2c2_watchdog_counter == 0)
+  if (cnt == 0)
   {
         __disable_irq();
 
@@ -1441,19 +1322,13 @@ bool_t i2c_submit(struct i2c_periph* periph, struct i2c_transaction* t) {
     //if (i2c_idle(periph))
     {
 #ifdef I2C_DEBUG_LED
-#ifdef USE_I2C1
 	if (periph == &i2c1)
 	{
 
         }
         else
 #endif
-#endif
         {
-#ifdef I2C_DEBUG_LED
-	LED2_ON();
-	LED2_OFF();
-#endif
           PPRZ_I2C_SEND_START(periph);
         }
     }
@@ -1466,23 +1341,16 @@ bool_t i2c_submit(struct i2c_periph* periph, struct i2c_transaction* t) {
 
 bool_t i2c_idle(struct i2c_periph* periph)
 {
-  // This is actually a difficult function:
-  // -simply reading the status flags can clear bits and corrupt the transaction
-
-  u32 i2c = (u32) periph->reg_addr;
+  I2C_TypeDef *regs = (I2C_TypeDef *) periph->reg_addr;
 
 #ifdef I2C_DEBUG_LED
-#ifdef USE_I2C1
 	if (periph == &i2c1)
 	{
 	  return TRUE;
         }
 #endif
-#endif
-
-  // First we check if the software thinks it is ready
   if (periph->status == I2CIdle)
-    return ! (BIT_X_IS_SET_IN_REG( I2C_SR2_BUSY, I2C_SR2(i2c) ) );
+    return ! (BIT_X_IS_SET_IN_REG( I2C_SR2_BIT_BUSY, regs->SR2 ) );
   else
     return FALSE;
 }

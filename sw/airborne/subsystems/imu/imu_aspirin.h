@@ -151,6 +151,9 @@ extern void imu_aspirin_arch_init(void);
 
 static inline void gyro_read_i2c(void)
 {
+  imu_aspirin.i2c_trans_gyro.type = I2CTransTxRx;
+  imu_aspirin.i2c_trans_gyro.len_w = 1;
+  imu_aspirin.i2c_trans_gyro.len_r = 6;
   imu_aspirin.i2c_trans_gyro.buf[0] = ITG3200_REG_GYRO_XOUT_H;
   i2c_submit(&i2c2,&imu_aspirin.i2c_trans_gyro);
   imu_aspirin.reading_gyro = 1;
@@ -172,6 +175,7 @@ static inline void accel_copy_spi(void)
   VECT3_ASSIGN(imu.accel_unscaled, ax, ay, az);
 }
 
+void i2c2_er_isr(void);
 
 static inline void imu_aspirin_event(void (* _gyro_handler)(void), void (* _accel_handler)(void), void (* _mag_handler)(void))
 {
@@ -189,7 +193,7 @@ static inline void imu_aspirin_event(void (* _gyro_handler)(void), void (* _acce
   // Reset everything if we've been waiting too long
   if (imu_aspirin.time_since_last_reading > ASPIRIN_GYRO_TIMEOUT) {
     // FIXME: there should be no arch specific code like that here!
-    i2c2_er_irq_handler();
+    i2c2_er_isr();
     gyro_read_i2c();
     imu_aspirin.time_since_last_reading = 0;
     return;
