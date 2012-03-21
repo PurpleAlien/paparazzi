@@ -33,23 +33,12 @@
 #include BOARD_CONFIG
 
 
-#if USE_SPI0
-
-extern void spi0_hw_init(void);
-
-#endif /* USE_SPI0 */
 
 // SSP is on SPI1 on lpc
 #if defined USE_SSP & !USE_SPI1
 #define USE_SP11 1
 // TODO other defines ?
 #endif
-
-#if USE_SPI1
-
-extern void spi1_hw_init(void);
-
-#endif /* USE_SPI1 */
 
 
 #ifdef SPI_SLAVE

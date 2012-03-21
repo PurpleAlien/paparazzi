@@ -280,7 +280,7 @@ __attribute__ ((always_inline)) static inline void SpiAutomaton(struct spi_perip
 //   ISR_EXIT();
 // }
 
-void spi0_hw_init(void) {
+void spi0_arch_init(void) {
 
   spi0.reg_addr = SPI0;
 
@@ -336,7 +336,7 @@ void spi1_ISR(void) {
   ISR_EXIT();
 }
 
-void spi1_hw_init(void) {
+void spi1_arch_init(void) {
 
   spi1.reg_addr = SPI1;
 

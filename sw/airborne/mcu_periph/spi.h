@@ -41,7 +41,7 @@ enum SPIMode {
   SPISlave
 };
 
-/** SPI slave selection behavior
+/** SPI slave selection behavior.
  * SelectUnselect: slave is selected before transaction and unselected after
  * Select: slave is selected before transaction but not unselected
  * Unselect: slave is not selected but unselected after transaction
@@ -58,7 +58,7 @@ enum SPISlaveSelect {
   SPINoSelect
 };
 
-/** SPI clock phase control
+/** SPI clock phase control.
  * control when data are sampled (rising or falling edge of clock)
  * depending of the clock polarity
  * clear: 0, set: 1
@@ -68,7 +68,7 @@ enum SPIClockPhase {
   SPICPHASet
 };
 
-/** SPI clock polarity control
+/** SPI clock polarity control.
  * clear (0) for clock idle low
  * set (1) for clock idle high
  */
@@ -77,14 +77,14 @@ enum SPIClockPolarity {
   SPICPOLSet
 };
 
-/** SPI Data size transfert
+/** SPI Data size transfer.
  */
 enum SPIDataSizeSelect {
   DSS8bit,
   DSS16bit
 };
 
-/** SPI transaction status
+/** SPI transaction status.
  */
 enum SPITransactionStatus {
   SPITransPending,
@@ -94,7 +94,7 @@ enum SPITransactionStatus {
   SPITransDone
 };
 
-/** SPI peripheral status
+/** SPI peripheral status.
  */
 enum SPIStatus {
   SPIIdle,
@@ -148,12 +148,22 @@ struct spi_periph {
 extern struct spi_periph spi0;
 extern void spi0_init(void);
 
+/** Architecture dependant SPI0 initialization.
+ * Must be implemented by underlying architecture
+ */
+extern void spi0_arch_init(void);
+
 #endif
 
 #if USE_SPI1
 
 extern struct spi_periph spi1;
 extern void spi1_init(void);
+
+/** Architecture dependant SPI1 initialization.
+ * Must be implemented by underlying architecture
+ */
+extern void spi1_arch_init(void);
 
 #endif
 
@@ -162,9 +172,15 @@ extern void spi1_init(void);
 extern struct spi_periph spi2;
 extern void spi2_init(void);
 
+/** Architecture dependant SPI2 initialization.
+ * Must be implemented by underlying architecture
+ */
+extern void spi2_arch_init(void);
+
+
 #endif
 
-/** Initialize a spi peripheral
+/** Initialize a spi peripheral.
  * @param p spi peripheral to be configured
  */
 extern void spi_init(struct spi_periph* p);
@@ -173,14 +189,14 @@ extern void spi_init(struct spi_periph* p);
  */
 extern void spi_init_slaves(void);
 
-/** Submit a spi transaction
+/** Submit a spi transaction.
  * @param p spi peripheral to be used
  * @param t spi transaction
  * @return return true if insertion to the transaction queue succed
  */
 extern bool_t spi_submit(struct spi_periph* p, struct spi_transaction* t);
 
-/** Select a slave
+/** Select a slave.
  * @param slave slave id
  */
 void spi_slave_select(uint8_t slave);
